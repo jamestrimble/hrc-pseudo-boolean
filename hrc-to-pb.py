@@ -44,16 +44,17 @@ class PBModel(object):
     def write_model_size_comment(self):
         print "* #variable= {} #constraint= {}".format(len(self.var_names), len(self.constrs))
 
-    def write_model(self):
+    def write_model(self, quiet):
         print "min:", " ".join("-" + str(t[0]) + " " + "x{}".format(t[1]+1) for t in self.objective) + ";"
         for c in self.constrs:
-            print "* ", c.name+":"
-            print "*     ", " ".join("{}*{}".format(i, self.var_names[j]) for i, j in c[0]), c[1], c[2]
+            if not quiet:
+                print "* ", c.name+":"
+                print "*     ", " ".join("{}*{}".format(i, self.var_names[j]) for i, j in c[0]), c[1], c[2]
             if c.comp == "<=":
                 print " ".join("{:+d} x{}".format(-i, j+1) for i, j in c[0]), ">=", str(-c[2]) + ";"
             else:
                 print " ".join("{:+d} x{}".format(i, j+1) for i, j in c[0]), c[1], str(c[2]) + ";"
-            print "*"
+            if not quiet: print "*"
             
 
 class Instance(object):
@@ -121,12 +122,12 @@ class Instance(object):
             
         self.add_objective()
 
-    def write(self):
+    def write(self, quiet):
         self.pb_model.write_model_size_comment()
 #        self.pb_model.show_constrs()
         self.pb_model.show_var_names()
         self.pb_model.show_objective()
-        self.pb_model.write_model()
+        self.pb_model.write_model(quiet)
 
     def add_objective(self):
         obj_terms = []
@@ -264,11 +265,12 @@ class Instance(object):
             
 
 
-def main(lines, max_bp):
+def main(lines, max_bp, quiet):
     instance = Instance(lines, PBModel(), max_bp)
-    instance.write()
+    instance.write(quiet)
 
 
 if __name__=="__main__":
     max_bp = int(sys.argv[1])
-    main([line.strip() for line in sys.stdin.readlines() if line.strip()], max_bp)
+    quiet = len(sys.argv) > 2 and 'q' in sys.argv[2]
+    main([line.strip() for line in sys.stdin.readlines() if line.strip()], max_bp, quiet)
