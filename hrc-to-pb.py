@@ -46,6 +46,15 @@ class PBModel(object):
 
     def write_model(self):
         print "min:", " ".join("-" + str(t[0]) + " " + "x{}".format(t[1]+1) for t in self.objective) + ";"
+        for c in self.constrs:
+            print "* ", c.name+":"
+            print "*     ", " ".join("{}*{}".format(i, self.var_names[j]) for i, j in c[0]), c[1], c[2]
+            if c.comp == "<=":
+                print " ".join("{:+d} x{}".format(-i, j+1) for i, j in c[0]), ">=", str(c[2]) + ";"
+            else:
+                print " ".join("{:+d} x{}".format(i, j+1) for i, j in c[0]), c[1], str(c[2]) + ";"
+            print "*"
+            
 
 class Instance(object):
     def __init__(self, lines, pb_model):
@@ -91,30 +100,30 @@ class Instance(object):
         for i in range(self.nhosp):
             self.hplace.append([self.pb_model.create_var("hosp{}-{}".format(i, j))
                                     for j in range(len(self.hpref[i]) + 1)])
-            # Hospital capacity constraint
-            self.pb_model.add_sum_leq_constr(self.hplace[-1], self.hosp_cap[i], "Hospital capacity")
-            # Force "unmatched" var if an insufficient number of places are matched
-            self.pb_model.add_constr(Constraint([(1, j) for j in self.hplace[-1][:-1]] +
-                                                [(self.hosp_cap[i], self.hplace[-1][-1])], ">=",
-                                                self.hosp_cap[i], "Hosp unmatched"))
+#            # Hospital capacity constraint
+#            self.pb_model.add_sum_leq_constr(self.hplace[-1], self.hosp_cap[i], "Hospital capacity")
+#            # Force "unmatched" var if an insufficient number of places are matched
+#            self.pb_model.add_constr(Constraint([(1, j) for j in self.hplace[-1][:-1]] +
+#                                                [(self.hosp_cap[i], self.hplace[-1][-1])], ">=",
+#                                                self.hosp_cap[i], "Hosp unmatched"))
 
-        # Chosen hosp prefs match chosen res prefs
-        for i, prefs in enumerate(self.hpref):
-            for pos, res in enumerate(prefs):
-                self.pb_model.add_constr(
-                        Constraint([(1, self.hplace[i][pos])] +
-                                   [(-1, self.rplace[res][k]) for k in self.rrank(res, i)],
-                                   "=", 0, "Hosp pref matches res prefs"))
+#        # Chosen hosp prefs match chosen res prefs
+#        for i, prefs in enumerate(self.hpref):
+#            for pos, res in enumerate(prefs):
+#                self.pb_model.add_constr(
+#                        Constraint([(1, self.hplace[i][pos])] +
+#                                   [(-1, self.rplace[res][k]) for k in self.rrank(res, i)],
+#                                   "=", 0, "Hosp pref matches res prefs"))
 
 
-        self.add_stability()
+#        self.add_stability()
             
         self.add_objective()
 #        pp(self.rplace)
 #        pp(self.hosp_cap)
 #        pp(self.hplace)
         self.pb_model.write_model_size_comment()
-        self.pb_model.show_constrs()
+#        self.pb_model.show_constrs()
         self.pb_model.show_var_names()
         self.pb_model.show_objective()
         self.pb_model.write_model()
