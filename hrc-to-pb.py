@@ -25,11 +25,6 @@ class PBModel(object):
     def add_sum_eq_constr(self, terms, rhs, name="UNNAMED"):
         self.constrs.append(Constraint([(1, term) for term in terms], "=", rhs, name))
 
-    def show_constrs(self):
-        for c in self.constrs:
-            print "* ", c.name+":"
-            print "*     ", " ".join("{}*{}".format(i, self.var_names[j]) for i, j in c[0]), c[1], c[2]
-
     def show_objective(self):
         print "* Objective: max:"
         print "*     ", " ".join("{}*{}".format(i, self.var_names[j]) for i, j in self.objective)
@@ -124,8 +119,8 @@ class Instance(object):
 
     def write(self, quiet):
         self.pb_model.write_model_size_comment()
-#        self.pb_model.show_constrs()
-        self.pb_model.show_var_names()
+        if not quiet:
+            self.pb_model.show_var_names()
         self.pb_model.show_objective()
         self.pb_model.write_model(quiet)
 
