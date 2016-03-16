@@ -188,36 +188,37 @@ class Instance(object):
         
     def add_type3a(self, i, partner):
         for j, (h, h2) in enumerate(zip(self.rpref[i], self.rpref[partner])):
-            if h != h2:
-                hrank_of_res = self.hrank(h, i)
-                hrank_of_partner = self.hrank(h2, partner) 
-                hosp1_has_space_var = self.pb_model.create_var("hosp1_space-{}-{}".format(h, hrank_of_res))
-                hplace_vars = [self.hplace[h][k] for k in range(hrank_of_res+1)]
-                self.pb_model.add_constr(Constraint([(self.hosp_cap[h], hosp1_has_space_var)] + 
-                                          [(1, v) for v in hplace_vars],
-                                          ">=", self.hosp_cap[h], "Hosp 1 has space var has correct value"))
-                hosp2_has_space_var = self.pb_model.create_var("hosp2_space-{}-{}".format(h2, hrank_of_partner))
-                hplace_vars = [self.hplace[h2][k] for k in range(hrank_of_partner+1)]
-                self.pb_model.add_constr(Constraint([(self.hosp_cap[h2], hosp2_has_space_var)] + 
-                                          [(1, v) for v in hplace_vars],
-                                          ">=", self.hosp_cap[h2], "Hosp 2 has space var has correct value"))
+            if h == h2: continue
 
-                var = self.pb_model.create_var("type3a-{}-{}".format(i, j))
-                self.bp_vars.append(var)
-                self.pb_model.add_constr(Constraint([(1, var), (-1, hosp1_has_space_var), (-1, hosp2_has_space_var)] +
-                                  [(-1, self.rplace[i][idx]) for idx in range(j+1, len(self.rpref[i])+1)
-                                        if idx == len(self.rpref[i]) or (h != self.rpref[i][idx] and h2 != self.rpref[partner][idx])],
-                                  ">=", -2, "Type 3a stability"))
+            hrank_of_res = self.hrank(h, i)
+            hrank_of_partner = self.hrank(h2, partner) 
+            hosp1_has_space_var = self.pb_model.create_var("hosp1_space-{}-{}".format(h, hrank_of_res))
+            hplace_vars = [self.hplace[h][k] for k in range(hrank_of_res+1)]
+            self.pb_model.add_constr(Constraint([(self.hosp_cap[h], hosp1_has_space_var)] + 
+                                      [(1, v) for v in hplace_vars],
+                                      ">=", self.hosp_cap[h], "Hosp 1 has space var has correct value"))
+            hosp2_has_space_var = self.pb_model.create_var("hosp2_space-{}-{}".format(h2, hrank_of_partner))
+            hplace_vars = [self.hplace[h2][k] for k in range(hrank_of_partner+1)]
+            self.pb_model.add_constr(Constraint([(self.hosp_cap[h2], hosp2_has_space_var)] + 
+                                      [(1, v) for v in hplace_vars],
+                                      ">=", self.hosp_cap[h2], "Hosp 2 has space var has correct value"))
+
+            var = self.pb_model.create_var("type3a-{}-{}".format(i, j))
+            self.bp_vars.append(var)
+            self.pb_model.add_constr(Constraint([(1, var), (-1, hosp1_has_space_var), (-1, hosp2_has_space_var)] +
+                              [(-1, self.rplace[i][idx]) for idx in range(j+1, len(self.rpref[i])+1)
+                                    if idx == len(self.rpref[i]) or (h != self.rpref[i][idx] and h2 != self.rpref[partner][idx])],
+                              ">=", -2, "Type 3a stability"))
         
     def add_type3bcd(self, i, partner):
         # The hospital should have no more than capacity-2 spaces used up to resident i,
         # and no more than capacity-1 spaces used up to resident partner
         for j, (h, h2) in enumerate(zip(self.rpref[i], self.rpref[partner])):
-            if h == h2: continue
+            if h != h2: continue
 
             hrank_of_res = self.hrank(h, i)
             hrank_of_partner = self.hrank(h, partner) 
-            if hrank_of_res >= hrank_of_partner: continue
+            if hrank_of_res > hrank_of_partner: continue
 
             hosp_has_space_part_1_var = self.pb_model.create_var("hosp(3bcd)_space-{}-{}-part-1".format(h, hrank_of_res))
             hplace_vars = [self.hplace[h][k] for k in range(hrank_of_res+1)]
@@ -237,7 +238,7 @@ class Instance(object):
                                                  (-1, hosp_has_space_part_2_var)
                                                  ], ">=", -1, "Hospital has space (3bcd)"))
 
-            var = self.pb_model.create_var("type3a-{}-{}".format(i, j))
+            var = self.pb_model.create_var("type3bcd-{}-{}".format(i, j))
             self.bp_vars.append(var)
             self.pb_model.add_constr(Constraint([(1, var), (-1, hosp_has_space_var)] +
                               [(-1, self.rplace[i][idx]) for idx in range(j+1, len(self.rpref[i])+1)
