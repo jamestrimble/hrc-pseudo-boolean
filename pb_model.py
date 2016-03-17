@@ -3,9 +3,10 @@ from collections import namedtuple
 Constraint = namedtuple('Constraint', ['terms', 'comp', 'rhs', 'name'])
 
 class PBModel(object):
-    def __init__(self):
+    def __init__(self, flatzinc):
         self.var_names = []
         self.constrs = []
+        self.flatzinc = flatzinc
 
     def create_var(self, name):
         self.var_names.append(name)
@@ -49,4 +50,10 @@ class PBModel(object):
                 print " ".join("{:+d} x{}".format(i, j+1) for i, j in c[0]), c[1], str(c[2]) + ";"
             if not quiet: print "*"
             
+    def write(self, quiet):
+        self.write_model_size_comment()
+        if not quiet:
+            self.show_var_names()
+            self.show_objective()
+        self.write_model(quiet)
 
