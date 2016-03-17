@@ -134,7 +134,7 @@ class Instance(object):
             elif hrank_of_res < hrank_of_partner:
                 self.add_type3bcd(i, partner, j, h, hrank_of_res, hrank_of_partner)
             else:
-                self.add_type3bcd(partner, i, j, h, hrank_of_res, hrank_of_partner)
+                self.add_type3bcd(partner, i, j, h, hrank_of_partner, hrank_of_res)
 
     def add_type3a(self, i, partner, j, h, h2, hrank_of_res, hrank_of_partner):
         hosp1_has_space_var = self.pb_model.create_var("hosp1_space-{}-{}".format(h, hrank_of_res))
@@ -183,9 +183,8 @@ class Instance(object):
            <= up_to_pos in h's preference list, then variable v must take the value 1.
            (Otherwise, v can take any value.)
         """
-        hplace_vars = self.hplace[h][:up_to_pos + 1]
-        self.pb_model.add_constr(Constraint([(n_res, v)] + 
-                                  [(1, v) for v in hplace_vars], ">=", n_res, constraint_name))
+        self.pb_model.add_constr(Constraint(
+                [(n_res, v)] + [(1, v) for v in self.hplace[h][:up_to_pos + 1]], ">=", n_res, constraint_name))
         
     def is_single(r):
         "Is resident r single?"
