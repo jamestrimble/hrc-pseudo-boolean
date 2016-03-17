@@ -28,7 +28,9 @@ class Instance(object):
         for i in range(self.nhosp):
             self.hplace.append([self.pb_model.create_var("hosp{}-{}".format(i, j))
                                     for j in range(len(self.hpref[i]))])
-            self.pb_model.add_sum_leq_constr(self.hplace[-1], self.hosp_cap[i], "Hospital capacity")
+            if len(self.hpref[i]) > self.hosp_cap[i]:  # If hospital has more prefs than capacity
+                self.pb_model.add_sum_leq_constr(self.hplace[-1], self.hosp_cap[i],
+                        "Hospital capacity")
 
         # Chosen hosp prefs match chosen res prefs
         # TODO: re-use res pref vars in hospital lists for single residents
