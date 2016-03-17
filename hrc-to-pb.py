@@ -12,8 +12,6 @@ class Instance(object):
 
         # self.rplace[i][j]==1 <-> resident i gets his j^th choice
         # self.r_unassigned[i]==1 <-> resident i is not assigned to a hospital
-        # self.hplace[i][j]==1 <-> hospital i gets its j^th choice
-
         self.rplace = [None] * self.nres
         self.r_unassigned = [None] * self.nres
         for i in [c[0] for c in self.couples] + self.singles:
@@ -28,16 +26,13 @@ class Instance(object):
             self.rplace[j] = self.rplace[i]
             self.r_unassigned[j] = self.r_unassigned[i]
 
+        # self.hplace[i][j]==1 <-> hospital i gets its j^th choice
         self.hplace = []
         for i in range(self.nhosp):
             self.hplace.append([self.pb_model.create_var("hosp{}-{}".format(i, j))
-                                    for j in range(len(self.hpref[i]) + 1)])
+                                    for j in range(len(self.hpref[i]))])
             # Hospital capacity constraint
             self.pb_model.add_sum_leq_constr(self.hplace[-1], self.hosp_cap[i], "Hospital capacity")
-            # Force "unmatched" var if an insufficient number of places are matched
-            self.pb_model.add_constr(Constraint([(1, j) for j in self.hplace[-1][:-1]] +
-                                                [(self.hosp_cap[i], self.hplace[-1][-1])], ">=",
-                                                self.hosp_cap[i], "Hosp unmatched"))
 
         # Chosen hosp prefs match chosen res prefs
         # TODO: re-use res pref vars in hospital lists for single residents
