@@ -14,11 +14,14 @@ class PBModel(object):
     def add_constr(self, constr):
         self.constrs.append(constr)
 
-    def add_sum_leq_constr(self, terms, rhs, name="UNNAMED"):
-        self.constrs.append(Constraint([(1, term) for term in terms], "<=", rhs, name))
+    def add_sum_leq_constr(self, variables, rhs, name="UNNAMED"):
+        self.constrs.append(Constraint([(1, variable) for variable in variables], "<=", rhs, name))
 
-    def add_sum_eq_constr(self, terms, rhs, name="UNNAMED"):
-        self.constrs.append(Constraint([(1, term) for term in terms], "=", rhs, name))
+    def add_sum_eq_constr(self, variables, rhs, name="UNNAMED"):
+        self.constrs.append(Constraint([(1, variable) for variable in variables], "=", rhs, name))
+
+    def add_exactly_one_constr(self, variables, name="UNNAMED"):
+        self.constrs.append(Constraint([(1, variable) for variable in variables], "=", 1, name))
 
     def show_objective(self):
         print "* Objective: max:"

@@ -10,25 +10,24 @@ class Instance(object):
 
         self.read_lines(lines)
 
-        # For each resident, an array of vars such that
         # self.rplace[i][j]==1 <-> resident i gets his j^th choice
-        # (with the last position indicting unplaced)
-        self.rplace = []
-        for i in range(self.ncoup):
-            self.rplace.append([self.pb_model.create_var("res{}-{}".format(i*2, j))
-                                    for j in range(len(self.rpref[i*2]) + 1)])
-            # This resident is assigned exactly one position on her pref list (or unassigned)
-            self.pb_model.add_sum_eq_constr(self.rplace[-1], 1, "Coupled resident assigned only once")
-            self.rplace.append(self.rplace[-1])  # Identical list for other member of couple
-        for i in range(self.first_single, self.nres):
-            self.rplace.append([self.pb_model.create_var("res{}-{}".format(i, j))
-                                    for j in range(len(self.rpref[i]) + 1)])
-            # This resident is assigned exactly one position on her pref list (or unassigned)
-            self.pb_model.add_sum_eq_constr(self.rplace[-1], 1, "Single resident assigned only once")
-
-        # For each hosp, an array of vars such that
+        # self.r_unassigned[i]==1 <-> resident i is not assigned to a hospital
         # self.hplace[i][j]==1 <-> hospital i gets its j^th choice
-        # (with the last position indicting not full)
+
+        self.rplace = [None] * self.nres
+        self.r_unassigned = [None] * self.nres
+        for i in [c[0] for c in self.couples] + self.singles:
+            self.rplace[i] = [self.pb_model.create_var("res{}-{}".format(i, j))
+                                    for j in range(len(self.rpref[i]))]
+            self.r_unassigned[i] = self.pb_model.create_var("res{}_unassigned".format(i))
+            self.pb_model.add_exactly_one_constr(self.rplace[i] + [self.r_unassigned[i]],
+                    "Resident assigned exactly once, or unassigned")
+
+        for i, j in self.couples:
+            # Identical vars for second member of each couple
+            self.rplace[j] = self.rplace[i]
+            self.r_unassigned[j] = self.r_unassigned[i]
+
         self.hplace = []
         for i in range(self.nhosp):
             self.hplace.append([self.pb_model.create_var("hosp{}-{}".format(i, j))
@@ -58,6 +57,8 @@ class Instance(object):
         self.ncoup = int(lines[2])
         self.nsingle = self.nres - 2 * self.ncoup
         self.first_single = 2 * self.ncoup
+        self.couples = [(i*2, i*2+1) for i in range(self.ncoup)]
+        self.singles = range(self.first_single, self.nres)
         self.npost = int(lines[3])
         lines = lines[9:]
 
@@ -80,10 +81,10 @@ class Instance(object):
     def add_objective(self):
         obj_terms = []
         for i in range(self.ncoup):
-            for v in self.rplace[i*2][:-1]:
+            for v in self.rplace[i*2]:
                 obj_terms.append((2, v))
         for i in range(self.nsingle):
-            for v in self.rplace[self.first_single + i][:-1]:
+            for v in self.rplace[self.first_single + i]:
                 obj_terms.append((1, v))
         self.pb_model.add_objective(obj_terms)
         
@@ -91,7 +92,7 @@ class Instance(object):
         self.bp_vars = []   # Blocking pair vars
 
         # TYPE 1
-        for i in range(self.first_single, self.nres):
+        for i in self.singles:
             for j, h in enumerate(self.rpref[i]):
                 hosp_has_space_var = self.pb_model.create_var("hosp_space-{}-{}".format(h, self.hrank(h, i)))
                 self.pb_model.add_constr(Constraint([(self.hosp_cap[h], hosp_has_space_var)] + 
@@ -103,17 +104,15 @@ class Instance(object):
                                           [(1, v) for v in self.rplace[i][:j+1]], ">=", 0, "Type 1 stability"))
 
         # TYPE 2
-        for couple_num in range(self.ncoup):
-            i = couple_num * 2
-            self.add_type2(i, i+1)
-            self.add_type2(i+1, i)
+        for i, j in self.couples:
+            self.add_type2(i, j)
+            self.add_type2(j, i)
 
         # TYPE 3
-        for couple_num in range(self.ncoup):
-            i = couple_num * 2
-            self.add_type3a(i, i+1)
-            self.add_type3bcd(i, i+1)
-            self.add_type3bcd(i+1, i)
+        for i, j in self.couples:
+            self.add_type3a(i, j)
+            self.add_type3bcd(i, j) 
+            self.add_type3bcd(j, i)
 
         self.pb_model.add_sum_leq_constr(self.bp_vars, self.max_bp, "Max permitted number of blocking pairs")
 
@@ -154,9 +153,10 @@ class Instance(object):
             var = self.pb_model.create_var("type3a-{}-{}".format(i, j))
             self.bp_vars.append(var)
             self.pb_model.add_constr(Constraint([(1, var), (-1, hosp1_has_space_var), (-1, hosp2_has_space_var)] +
-                              [(-1, self.rplace[i][idx]) for idx in range(j+1, len(self.rpref[i])+1)
-                                    if idx == len(self.rpref[i]) or (h != self.rpref[i][idx] and h2 != self.rpref[partner][idx])],
-                              ">=", -2, "Type 3a stability"))
+                          [(-1, self.rplace[i][idx]) for idx in range(j+1, len(self.rpref[i]))
+                                if h != self.rpref[i][idx] and h2 != self.rpref[partner][idx]] +
+                          [(-1, self.r_unassigned[i])],
+                          ">=", -2, "Type 3a stability"))
         
     def add_type3bcd(self, i, partner):
         # The hospital should have no more than capacity-2 spaces used up to resident i,
@@ -188,11 +188,15 @@ class Instance(object):
 
             var = self.pb_model.create_var("type3bcd-{}-{}".format(i, j))
             self.bp_vars.append(var)
-            self.pb_model.add_constr(Constraint([(1, var), (-1, hosp_has_space_var)] +
-                              [(-1, self.rplace[i][idx]) for idx in range(j+1, len(self.rpref[i])+1)
-                                    if idx == len(self.rpref[i]) or (h != self.rpref[i][idx] and h != self.rpref[partner][idx])],
+            self.pb_model.add_constr(Constraint([(1, var), (-1, hosp_has_space_var), (-1, self.r_unassigned[i])] +
+                              [(-1, self.rplace[i][idx]) for idx in range(j+1, len(self.rpref[i]))
+                                    if h != self.rpref[i][idx] and h != self.rpref[partner][idx]],
                               ">=", -1, "Type 3bcd stability"))
         
+    def is_single(r):
+        "Is resident r single?"
+        return r >= self.first_single
+
     def rrank(self, r, h):
         """What ranks does resident r give hospital h (as an array)?
            Note that a resident in a couple may rank a hospital more than once
