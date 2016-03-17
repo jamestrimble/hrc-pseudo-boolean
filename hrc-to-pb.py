@@ -18,9 +18,5 @@ if __name__=="__main__":
             help="Output FlatZinc")
     args = parser.parse_args()
     
-    if args.flatzinc:
-        print "Error: flatzinc output not yet implemented"
-        sys.exit(1)
-
     main([line.strip() for line in sys.stdin.readlines() if line.strip()],
             args.max_bp, args.quiet, args.flatzinc)

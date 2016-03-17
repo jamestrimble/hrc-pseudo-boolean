@@ -50,10 +50,37 @@ class PBModel(object):
                 print " ".join("{:+d} x{}".format(i, j+1) for i, j in c[0]), c[1], str(c[2]) + ";"
             if not quiet: print "*"
             
+    def write_flatzinc(self):
+        print "array[1..{}] of var 0..1: x;".format(len(self.var_names))
+        print "var int: obj :: output_var;"
+        print "constraint int_lin_eq([{},-1],[{},obj],0);".format(
+                ",".join(str(t[0]) for t in self.objective),
+                ",".join("x[{}]".format(t[1]+1) for t in self.objective))
+        for c in self.constrs:
+            if c.comp == "<=":
+                print "constraint int_lin_le([{}],[{}],{});".format(
+                        ",".join(str(t[0]) for t in c.terms),
+                        ",".join("x[{}]".format(t[1]+1) for t in c.terms),
+                        c.rhs)
+            elif c.comp == ">=":
+                print "constraint int_lin_le([{}],[{}],{});".format(
+                        ",".join(str(-t[0]) for t in c.terms),
+                        ",".join("x[{}]".format(t[1]+1) for t in c.terms),
+                        -c.rhs)
+            elif c.comp == "=":
+                print "constraint int_lin_eq([{}],[{}],{});".format(
+                        ",".join(str(t[0]) for t in c.terms),
+                        ",".join("x[{}]".format(t[1]+1) for t in c.terms),
+                        c.rhs)
+        print "solve :: int_search(x, most_constrained, indomain_max, complete) minimize obj;"
+            
     def write(self, quiet):
-        self.write_model_size_comment()
-        if not quiet:
-            self.show_var_names()
-            self.show_objective()
-        self.write_model(quiet)
+        if self.flatzinc:
+            self.write_flatzinc()
+        else:  # .opb
+            self.write_model_size_comment()
+            if not quiet:
+                self.show_var_names()
+                self.show_objective()
+            self.write_model(quiet)
 
