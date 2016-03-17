@@ -42,8 +42,23 @@ class Instance(object):
                                    [(-1, self.rplace[res][k]) for k in self.rrank(res, i)],
                                    "=", 0, "Hosp pref matches res prefs"))
 
-        self.add_stability()
-        self.add_objective()
+        # Add stability
+        self.bp_vars = []   # Blocking pair vars
+
+        for i in self.singles:
+            self.add_type1(i)
+
+        for i, j in self.couples:
+            self.add_type2(i, j)
+            self.add_type2(j, i)
+            self.add_type3(i, j)
+
+        self.pb_model.add_sum_leq_constr(self.bp_vars, self.max_bp, "Max permitted number of blocking pairs")
+
+        # Add objective: two points for each matched couple and one point for each matched single
+        obj_terms = ([(2, v) for i,_ in self.couples for v in self.rplace[i]] +
+                     [(1, v) for i in self.singles for v in self.rplace[i]])
+        self.pb_model.add_objective(obj_terms)
 
     def read_lines(self, lines):
         self.nres = int(lines[0])
@@ -71,25 +86,6 @@ class Instance(object):
             self.pb_model.show_var_names()
             self.pb_model.show_objective()
         self.pb_model.write_model(quiet)
-
-    def add_objective(self):
-        # Two points for each matched couple and one point for each matched single
-        obj_terms = ([(2, v) for i,_ in self.couples for v in self.rplace[i]] +
-                     [(1, v) for i in self.singles for v in self.rplace[i]])
-        self.pb_model.add_objective(obj_terms)
-        
-    def add_stability(self):
-        self.bp_vars = []   # Blocking pair vars
-
-        for i in self.singles:
-            self.add_type1(i)
-
-        for i, j in self.couples:
-            self.add_type2(i, j)
-            self.add_type2(j, i)
-            self.add_type3(i, j)
-
-        self.pb_model.add_sum_leq_constr(self.bp_vars, self.max_bp, "Max permitted number of blocking pairs")
 
     def add_type1(self, i):
         for j, h in enumerate(self.rpref[i]):
