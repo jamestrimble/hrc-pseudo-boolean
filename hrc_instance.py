@@ -175,10 +175,6 @@ class Instance(object):
         self.pb_model.add_constr(Constraint(
                 [(n_res, v)] + [(1, v) for v in self.hplace[h][:up_to_pos + 1]], ">=", n_res, constraint_name))
         
-    def is_single(r):
-        "Is resident r single?"
-        return r >= self.first_single
-
     def rrank(self, r, h):
         """What ranks does resident r give hospital h (as an array)?
            Note that a resident in a couple may rank a hospital more than once
