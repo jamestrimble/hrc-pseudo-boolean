@@ -96,9 +96,8 @@ class Instance(object):
             # If hospital h would like to take resident i, hosp_has_space_var must take the value 1.
             # Otherwise, this variable can take any value.
             hosp_has_space_var = self.pb_model.create_var("type1_hosp_space-{}-{}-{}".format(i, h, self.hrank(h, i)))
-            self.pb_model.add_constr(Constraint([(self.hosp_cap[h], hosp_has_space_var)] + 
-                                      [(1, v) for v in self.hplace[h][:self.hrank(h, i) + 1]],
-                                      ">=", self.hosp_cap[h], "Hosp has space var has correct value (type 1)"))
+            self.enforce_hosp_space_var(hosp_has_space_var, h, self.hosp_cap[h], self.hrank(h, i),
+                    "Hosp has space var has correct value (type 1)")
             var = self.pb_model.create_var("type1-{}-{}".format(i, j))
             self.bp_vars.append(var)
             self.pb_model.add_constr(Constraint([(1, var), (-1, hosp_has_space_var)] +
@@ -139,15 +138,12 @@ class Instance(object):
 
     def add_type3a(self, i, partner, j, h, h2, hrank_of_res, hrank_of_partner):
         hosp1_has_space_var = self.pb_model.create_var("hosp1_space-{}-{}".format(h, hrank_of_res))
-        hplace_vars = self.hplace[h][:hrank_of_res + 1]
-        self.pb_model.add_constr(Constraint([(self.hosp_cap[h], hosp1_has_space_var)] + 
-                                  [(1, v) for v in hplace_vars],
-                                  ">=", self.hosp_cap[h], "Hosp 1 has space var has correct value (type 3a)"))
+        self.enforce_hosp_space_var(hosp1_has_space_var, h, self.hosp_cap[h], hrank_of_res,
+                "Hosp 1 has space var has correct value (type 3a)")
+
         hosp2_has_space_var = self.pb_model.create_var("hosp2_space-{}-{}".format(h2, hrank_of_partner))
-        hplace_vars = self.hplace[h2][:hrank_of_partner + 1]
-        self.pb_model.add_constr(Constraint([(self.hosp_cap[h2], hosp2_has_space_var)] + 
-                                  [(1, v) for v in hplace_vars],
-                                  ">=", self.hosp_cap[h2], "Hosp 2 has space var has correct value (type 3b)"))
+        self.enforce_hosp_space_var(hosp2_has_space_var, h2, self.hosp_cap[h2], hrank_of_partner,
+                "Hosp 2 has space var has correct value (type 3a)")
 
         var = self.pb_model.create_var("type3a-{}-{}".format(i, j))
         self.bp_vars.append(var)
@@ -161,17 +157,14 @@ class Instance(object):
         # The hospital should have no more than capacity-2 spaces used up to resident i,
         # and no more than capacity-1 spaces used up to resident partner
         hosp_has_space_part_1_var = self.pb_model.create_var("hosp(3bcd)_space-{}-{}-part-1".format(h, hrank_of_res))
-        hplace_vars = self.hplace[h][:hrank_of_res + 1]
-        self.pb_model.add_constr(Constraint([(self.hosp_cap[h]-1, hosp_has_space_part_1_var)] + 
-                                  [(1, v) for v in hplace_vars],
-                                  ">=", self.hosp_cap[h]-1, "Hosp (3bcd) has space var part 1 has correct value"))
+        self.enforce_hosp_space_var(hosp_has_space_part_1_var, h, self.hosp_cap[h] - 1, hrank_of_res,
+                "Hosp (3bcd) has space var part 1 has correct value")
 
         hosp_has_space_part_2_var = self.pb_model.create_var("hosp(3bcd)_space-{}-{}-part-2".format(h, hrank_of_partner))
-        hplace_vars = self.hplace[h][:hrank_of_partner + 1]
-        self.pb_model.add_constr(Constraint([(self.hosp_cap[h], hosp_has_space_part_2_var)] + 
-                                  [(1, v) for v in hplace_vars],
-                                  ">=", self.hosp_cap[h], "Hosp (3bcd) has space var part 2 has correct value"))
+        self.enforce_hosp_space_var(hosp_has_space_part_2_var, h, self.hosp_cap[h], hrank_of_partner,
+                "Hosp (3bcd) has space var part 2 has correct value")
 
+        # If there's space in both hospitals, then hosp_has_space_var must take value 1.
         hosp_has_space_var = self.pb_model.create_var("hosp(3bcd)_space-{}-{}".format(h, hrank_of_res))
         self.pb_model.add_constr(Constraint([(1, hosp_has_space_var),
                                              (-1, hosp_has_space_part_1_var),
@@ -184,6 +177,15 @@ class Instance(object):
                           [(-1, self.rplace[i][idx]) for idx in range(j+1, len(self.rpref[i]))
                                 if h != self.rpref[i][idx] and h != self.rpref[partner][idx]],
                           ">=", -1, "Type 3bcd stability"))
+        
+    def enforce_hosp_space_var(self, v, h, n_res, up_to_pos, constraint_name):
+        """Enforce the condition that if hospital h has fewer than n_res residents assigned in positions
+           <= up_to_pos in h's preference list, then variable v must take the value 1.
+           (Otherwise, v can take any value.)
+        """
+        hplace_vars = self.hplace[h][:up_to_pos + 1]
+        self.pb_model.add_constr(Constraint([(n_res, v)] + 
+                                  [(1, v) for v in hplace_vars], ">=", n_res, constraint_name))
         
     def is_single(r):
         "Is resident r single?"
