@@ -1,4 +1,8 @@
+import sys
+import time
 from pb_model import Constraint
+import collections
+from pprint import pprint as pp
 
 class Instance(object):
     def __init__(self, lines, pb_model, max_bp):
@@ -6,6 +10,7 @@ class Instance(object):
         self.max_bp = max_bp   # Maximum permitted number of blocking pairs
 
         self.read_lines(lines)
+        self.presolve()
 
         # self.rplace[i][j]==1 <-> resident i gets his j^th choice
         # self.r_unassigned[i]==1 <-> resident i is not assigned to a hospital
@@ -79,6 +84,77 @@ class Instance(object):
         # Hospital capacities
         self.hosp_cap = [int(line.split()[1]) for line in lines[self.nres:self.nres+self.nhosp]]
 
+    def presolve(self):
+        """Reduce the size of the problem by removing some preferences that,
+           if chosen, would result in too many blocking pairs.
+        """
+        q = collections.deque()  # Queue of residents to process
+        in_q = [False] * self.nres
+        for i in [r1 for r1, r2 in self.couples] + self.singles:
+            q.append(i)
+            in_q[i] = True
+
+        while q:
+            i = q.popleft()
+            in_q[i] = False
+            # num_bp counts the number of pairs that must be blocking pairs
+            # if i doesn't get this or a better choice,
+            # due to the low position of i on the hospital's preference list
+            num_bp = 0
+            if self.is_single(i):
+                for j, hosp in enumerate(self.rpref[i][:-1]):
+                    if self.hrank(hosp, i) < self.hosp_cap[hosp]:
+                        num_bp += 1
+                    if num_bp > self.max_bp:
+                        #print "Cutting down pref list of res {} after pos {}".format(i, j)
+                        for hosp in self.rpref[i][j+1:]:
+                            self.hpref[hosp].remove(i)
+                            if len(self.hpref[hosp]) >= self.hosp_cap[hosp]:
+                                r = self.hpref[hosp][self.hosp_cap[hosp] - 1]
+                                if not in_q[r]:
+                                    if not self.is_single(r) and r % 2 == 1:
+                                        r -= 1  # Always add the first member of a couple
+                                    q.append(r)
+                                    in_q[r] = True
+                        self.rpref[i] = self.rpref[i][:j+1]  # Trim resident's preferences
+                        break
+            else:
+                for j, (hosp1, hosp2) in enumerate(zip(self.rpref[i][:-1], self.rpref[i+1][:-1])):
+                    hosp1_cap = self.hosp_cap[hosp1]
+                    if hosp1 == hosp2:
+                        # Both residents in couples are in hosp1's top-<capacity> choices
+                        if self.hrank(hosp1, i) < hosp1_cap and self.hrank(hosp1, i+1) < hosp1_cap:
+                            num_bp += 1
+                    else:
+                        hosp2_cap = self.hosp_cap[hosp2]
+                        if self.hrank(hosp1, i) < hosp1_cap and self.hrank(hosp2, i+1) < hosp2_cap:
+                            num_bp += 1
+
+                    if num_bp > self.max_bp:
+                        # remove residents in this couple from preference lists of hospitals
+                        # where they can no longer appear
+                        for res in [i, i+1]:
+                            # h_remove is the set of hospitals from whose pref lists we can remove resident res
+                            h_remove = set(self.rpref[res])
+                            for hosp in self.rpref[res][:j+1]: h_remove.discard(hosp)
+                            for hosp in h_remove:
+                                self.hpref[hosp].remove(res)
+                                if len(self.hpref[hosp]) >= self.hosp_cap[hosp]:
+                                    r = self.hpref[hosp][self.hosp_cap[hosp] - 1]
+                                    if not in_q[r]:
+                                        if not self.is_single(r) and r % 2 == 1:
+                                            r -= 1  # Always add the first member of a couple
+                                        q.append(r)
+                                        in_q[r] = True
+
+                            # Trim resident's preferences
+                            self.rpref[res] = self.rpref[res][:j+1] 
+                        break
+#        pp (self.rpref[:self.first_single])
+#        print
+#        pp (self.rpref[self.first_single:])
+#        sys.exit(1)
+           
     def write(self, quiet):
         self.pb_model.write(quiet)
 
@@ -97,13 +173,16 @@ class Instance(object):
     def add_type2(self, i, partner):
         for j, h in enumerate(self.rpref[i]):
             hrank_of_res = self.hrank(h, i)
-            hrank_of_partner = self.hrank(h, partner) 
             # If hospital h isn't filled to capacity by i's partner and residents preferred to i,
             # then hosp_has_space_var must take the value 1.
             hosp_has_space_var = self.pb_model.create_var("type2_hosp_space-{}-{}-{}".format(i, h, hrank_of_res))
             hplace_vars = self.hplace[h][:hrank_of_res + 1]
-            if hrank_of_partner is not None and hrank_of_partner > hrank_of_res:
-                hplace_vars.append(self.hplace[h][hrank_of_partner])
+            try:
+                hrank_of_partner = self.hrank(h, partner) 
+                if hrank_of_partner > hrank_of_res:
+                    hplace_vars.append(self.hplace[h][hrank_of_partner])
+            except ValueError:
+                pass   # Hospital doesn't rank partner
             self.pb_model.add_constr(Constraint([(self.hosp_cap[h], hosp_has_space_var)] + 
                                       [(1, v) for v in hplace_vars],
                                       ">=", self.hosp_cap[h], "Hosp has space var has correct value (type 2)"))
@@ -177,6 +256,9 @@ class Instance(object):
         self.pb_model.add_constr(Constraint(
                 [(n_res, v)] + [(1, v) for v in self.hplace[h][:up_to_pos + 1]], ">=", n_res, constraint_name))
         
+    def is_single(self, res):
+        return res >= self.first_single
+
     def rrank(self, r, h):
         """What ranks does resident r give hospital h (as an array)?
            Note that a resident in a couple may rank a hospital more than once
@@ -185,8 +267,5 @@ class Instance(object):
             
     def hrank(self, h, r):
         "What rank does hospital h give resident r?"
-        for i, res in enumerate(self.hpref[h]):
-            if res == r:
-                return i
-        return None
+        return self.hpref[h].index(r)
 
