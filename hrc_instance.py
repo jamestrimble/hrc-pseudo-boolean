@@ -5,12 +5,13 @@ import collections
 from pprint import pprint as pp
 
 class Instance(object):
-    def __init__(self, lines, pb_model, max_bp):
+    def __init__(self, lines, pb_model, max_bp, presolve=True):
         self.pb_model = pb_model
         self.max_bp = max_bp   # Maximum permitted number of blocking pairs
 
         self.read_lines(lines)
-        self.presolve()
+        if presolve:
+            self.presolve()
 
         # self.rplace[i][j]==1 <-> resident i gets his j^th choice
         # self.r_unassigned[i]==1 <-> resident i is not assigned to a hospital
@@ -269,3 +270,29 @@ class Instance(object):
         "What rank does hospital h give resident r?"
         return self.hpref[h].index(r)
 
+    def show_sol(self, filename):
+        # TODO: make this less hacky
+        with open(filename) as f:
+            lines = [line.strip()[3:] for line in f if line.startswith("res")]
+        assigned_pos = [None] * self.nres
+        for line in lines:
+            if not line.endswith("unassigned"):
+                i, pos = [int(x) for x in line.split("-")]
+            assigned_pos[i] = pos
+            if not self.is_single(i):
+                assigned_pos[i+1] = pos
+        for i, (pos, rpref) in enumerate(zip(assigned_pos, self.rpref)):
+            print i, " ", " ".join("*"+str(h) if j==pos else " "+str(h) for j, h in enumerate(rpref))
+        print
+        print
+        for i, hpref in enumerate(self.hpref):
+            print i, " ", \
+                    "{}/{}".format(
+                            sum(assigned_pos[r] is not None and self.rpref[r][assigned_pos[r]]==i for r in hpref), self.hosp_cap[i]), \
+                    " ", " ".join(
+                    ("*"+str(r) if assigned_pos[r] is not None and self.rpref[r][assigned_pos[r]]==i else " "+str(r))
+                    + ("\n   " if j % 20 == 19 else "")
+                    for j, r in enumerate(hpref))
+            print
+
+        assert sum(len(set(rpref)) for rpref in self.rpref) == sum(len(set(hpref)) for hpref in self.hpref)
