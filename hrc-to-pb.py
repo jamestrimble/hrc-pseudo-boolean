@@ -4,8 +4,8 @@ import sys
 import hrc_instance
 from pb_model import PBModel
             
-def main(lines, max_bp, quiet, flatzinc):
-    instance = hrc_instance.Instance(lines, PBModel(flatzinc), max_bp)
+def main(lines, max_bp, quiet, flatzinc, presolve):
+    instance = hrc_instance.Instance(lines, PBModel(flatzinc), max_bp, presolve)
     instance.write(quiet)
 
 def show_sol(lines, sol_filename):
@@ -20,6 +20,8 @@ if __name__=="__main__":
             help="Suppress most comments in output")
     parser.add_argument("--flatzinc", "-f", action="store_true", required=False,
             help="Output FlatZinc")
+    parser.add_argument("--no-presolve", action="store_true", required=False,
+            help="Disable presolve")
     parser.add_argument("--show-sol", type=str, required=False,
             help="Show a solution from file")
     args = parser.parse_args()
@@ -29,4 +31,4 @@ if __name__=="__main__":
                 args.show_sol)
     else:
         main([line.strip() for line in sys.stdin.readlines() if line.strip()],
-                args.max_bp, args.quiet, args.flatzinc)
+                args.max_bp, args.quiet, args.flatzinc, not args.no_presolve)
