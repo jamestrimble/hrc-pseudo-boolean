@@ -89,6 +89,7 @@ class Instance(object):
         """Reduce the size of the problem by removing some preferences that,
            if chosen, would result in too many blocking pairs.
         """
+
         q = collections.deque()  # Queue of residents to process
         in_q = [False] * self.nres
         for i in [r1 for r1, r2 in self.couples] + self.singles:
@@ -108,28 +109,20 @@ class Instance(object):
                         num_bp += 1
                     if num_bp > self.max_bp:
                         #print "Cutting down pref list of res {} after pos {}".format(i, j)
-                        for hosp in self.rpref[i][j+1:]:
-                            self.hpref[hosp].remove(i)
-                            if len(self.hpref[hosp]) >= self.hosp_cap[hosp]:
-                                r = self.hpref[hosp][self.hosp_cap[hosp] - 1]
-                                if not in_q[r]:
-                                    if not self.is_single(r) and r % 2 == 1:
-                                        r -= 1  # Always add the first member of a couple
-                                    q.append(r)
-                                    in_q[r] = True
+                        self.remove_res_from_hosps(i, self.rpref[i][j+1:], q, in_q)
                         self.rpref[i] = self.rpref[i][:j+1]  # Trim resident's preferences
                         break
             else:
                 for j, (hosp1, hosp2) in enumerate(zip(self.rpref[i][:-1], self.rpref[i+1][:-1])):
                     hosp1_cap = self.hosp_cap[hosp1]
-                    if hosp1 == hosp2:
-                        # Both residents in couples are in hosp1's top-<capacity> choices
-                        if self.hrank(hosp1, i) < hosp1_cap and self.hrank(hosp1, i+1) < hosp1_cap:
-                            num_bp += 1
-                    else:
-                        hosp2_cap = self.hosp_cap[hosp2]
-                        if self.hrank(hosp1, i) < hosp1_cap and self.hrank(hosp2, i+1) < hosp2_cap:
-                            num_bp += 1
+                    if self.hrank(hosp1, i) < hosp1_cap:
+                        if hosp1 == hosp2:
+                            if self.hrank(hosp1, i+1) < hosp1_cap:
+                                num_bp += 1
+                        else:
+                            hosp2_cap = self.hosp_cap[hosp2]
+                            if self.hrank(hosp2, i+1) < self.hosp_cap[hosp2]:
+                                num_bp += 1
 
                     if num_bp > self.max_bp:
                         # remove residents in this couple from preference lists of hospitals
@@ -138,24 +131,93 @@ class Instance(object):
                             # h_remove is the set of hospitals from whose pref lists we can remove resident res
                             h_remove = set(self.rpref[res])
                             for hosp in self.rpref[res][:j+1]: h_remove.discard(hosp)
-                            for hosp in h_remove:
-                                self.hpref[hosp].remove(res)
-                                if len(self.hpref[hosp]) >= self.hosp_cap[hosp]:
-                                    r = self.hpref[hosp][self.hosp_cap[hosp] - 1]
-                                    if not in_q[r]:
-                                        if not self.is_single(r) and r % 2 == 1:
-                                            r -= 1  # Always add the first member of a couple
-                                        q.append(r)
-                                        in_q[r] = True
-
+                            self.remove_res_from_hosps(res, h_remove, q, in_q)
                             # Trim resident's preferences
                             self.rpref[res] = self.rpref[res][:j+1] 
                         break
+
+
+        keep_going = True
+        while keep_going:
+            keep_going = self.presolve_truncate_hosp_prefs()
+
 #        pp (self.rpref[:self.first_single])
 #        print
 #        pp (self.rpref[self.first_single:])
 #        sys.exit(1)
            
+    def presolve_truncate_hosp_prefs(self):
+        """For each hospital h, try to find and remove a suffix of h's pref list that can't be matched.
+
+           For example, suppose we have a hospital with capacity 10, and that max_bp is 1.
+           Further, suppose that of the first 14 residents on h's pref list, 11 are such
+           that they are single and rank h first. Then, we can safely remove everything after
+           the 14th element of h's pref list.
+
+           Returns: whether any preferences were removed
+        """
+        truncated = False
+        for h in range(self.nhosp):
+            count = 0  # Number of residents who rank h first
+            for j, r in enumerate(self.hpref[h][:-1]):
+                if self.is_single(r):
+                    if self.rrank(r, h)[0] == 0:
+                        count += 1
+                else:
+                    partner = self.get_partner(r)
+                    #print len(self.rpref[res]), len(self.rpref[partner])
+                    partner_first_pref = self.rpref[partner][0]
+                    if (self.rrank(r, h)[0] == 0 and partner_first_pref != h and
+                            self.hrank(partner_first_pref, partner) < self.hosp_cap[partner_first_pref]):
+                        count += 1
+                if count == self.hosp_cap[h] + self.max_bp:
+                    truncated = True
+                    # residents_to_remove is the set of residents to be removed from the truncated hospital
+                    # pref list. This will consist of partners of people in the truncated part of h's preference
+                    # list such that h only appears in the partner's pref list at a position where the other
+                    # partner also wishes to be assigned to h.
+                    residents_to_remove = set()
+                    for res in self.hpref[h][j+1:]:
+                        if self.is_single(res):
+                            self.rpref[res].remove(h)
+                        else:
+                            to_keep = [idx for idx, hosp in enumerate(self.rpref[res]) if hosp != h]
+                            partner = self.get_partner(res)
+                            hosps = set(self.rpref[partner]) # all hosps on partner's pref list
+                            # all hosps that will remain on partner's pref list
+                            hosps_to_keep = set(hosp for k, hosp in enumerate(self.rpref[partner]) if k in to_keep)
+                            hosps_to_remove = hosps - hosps_to_keep
+                            self.rpref[res] = [self.rpref[res][idx] for idx in to_keep]
+                            self.rpref[partner] = [self.rpref[partner][idx] for idx in to_keep]
+                            for hosp in hosps_to_remove:
+                                if hosp == h:
+                                    if self.hrank(h, partner) < j+1:
+                                        residents_to_remove.add(partner)
+                                else:
+                                    self.hpref[hosp].remove(partner)
+                    self.hpref[h] = self.hpref[h][:j+1]
+                    for res in residents_to_remove:
+                        self.hpref[h].remove(res)
+#                    if X: print " ", self.hpref[h]
+                    break
+        return truncated
+
+    def remove_res_from_hosps(self, res, hosps, q, in_q):
+        """Remove resident res from hospitals in hosps as part of presolve.
+           Residents who move into a hospital's top-k prefs, where k is the
+           hospital's capacity, are added to the queue.
+        """
+        for hosp in hosps:
+            self.hpref[hosp].remove(res)
+            if len(self.hpref[hosp]) >= self.hosp_cap[hosp]:
+                r = self.hpref[hosp][self.hosp_cap[hosp] - 1]
+                if not in_q[r]:
+                    if not self.is_single(r) and r % 2 == 1:
+                        r -= 1  # Always add the first member of a couple
+                    q.append(r)
+                    in_q[r] = True
+
+
     def write(self, quiet):
         self.pb_model.write(quiet)
 
@@ -259,6 +321,10 @@ class Instance(object):
         
     def is_single(self, res):
         return res >= self.first_single
+
+    def get_partner(self, res):
+        "Returns the ID of the partner of res, who is assumed to be in a couple"
+        return res + 1 if res % 2 == 0 else res - 1
 
     def rrank(self, r, h):
         """What ranks does resident r give hospital h (as an array)?
