@@ -317,7 +317,7 @@ class Instance(object):
            (Otherwise, v can take any value.)
         """
         self.pb_model.add_constr(Constraint(
-                [(n_res, v)] + [(1, v) for v in self.hplace[h][:up_to_pos + 1]], ">=", n_res, constraint_name))
+                [(n_res, v)] + [(1, var) for var in self.hplace[h][:up_to_pos + 1]], ">=", n_res, constraint_name))
         
     def is_single(self, res):
         return res >= self.first_single
