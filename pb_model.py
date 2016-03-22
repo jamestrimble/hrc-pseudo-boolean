@@ -72,7 +72,7 @@ class PBModel(object):
                         ",".join(str(t[0]) for t in c.terms),
                         ",".join("x[{}]".format(t[1]+1) for t in c.terms),
                         c.rhs)
-        print "solve :: int_search(x, most_constrained, indomain_max, complete) minimize obj;"
+        print "solve maximize obj;"
             
     def write(self, quiet):
         if self.flatzinc:
